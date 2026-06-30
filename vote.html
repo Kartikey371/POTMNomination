@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Nominate — Vote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#081A3A; --card:#0F2B5C; --card-line:#2E5BAE; --gold:#3D8BFF;
+    --text:#F2F0E9; --muted:#9FB8E8; --green:#4CAF80; --red:#D9655B;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  body{margin:0; background:var(--bg) repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 26px); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; padding-bottom:40px;}
+  .wrap{max-width:480px; margin:0 auto; padding:0 18px;}
+  header{padding:28px 0 18px; text-align:center; position:relative;}
+  header::before{
+    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:160px; height:6px; border-radius:0 0 6px 6px;
+    background:repeating-linear-gradient(90deg, #FFFFFF 0 14px, var(--gold) 14px 28px);
+  }
+  .logo{width:72px; height:72px; border-radius:50%; object-fit:cover; margin-bottom:10px;}
+  .eyebrow{font-family:'Bebas Neue',sans-serif; letter-spacing:.18em; color:var(--gold); font-size:13px; margin:0 0 4px;}
+  h1{font-family:'Bebas Neue',sans-serif; font-size:42px; letter-spacing:.02em; margin:0; line-height:1;}
+  .sub{color:var(--muted); font-size:14px; margin-top:8px; line-height:1.5;}
+  .card{background:var(--card); border:1px solid var(--card-line); border-radius:16px; padding:18px; margin-bottom:14px;}
+  .voter-row{margin-bottom:16px;}
+  .voter-row label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:6px;}
+  input[type=text],input[type=password]{width:100%; background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Inter',sans-serif;}
+  input[type=text]:focus,input[type=password]:focus{outline:none; border-color:var(--gold);}
+  .pick-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 8px;}
+  select{width:100%; background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Inter',sans-serif; appearance:none; -webkit-appearance:none;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C8AA5' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; background-size:18px;}
+  select:focus{outline:none; border-color:var(--gold);}
+  .pick-num{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue'; font-size:12px; margin-right:6px;}
+  .submit-btn{width:100%; padding:15px; border:none; border-radius:12px; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.04em; cursor:pointer; margin-top:18px;}
+  .submit-btn:disabled{background:#3A3424; color:#6b6450; cursor:not-allowed;}
+  .msg{font-size:13px; margin-top:10px; text-align:center;}
+  .msg.ok{color:var(--green);} .msg.err{color:var(--red);}
+  .status{font-size:12px; color:var(--muted); text-align:center; margin-top:10px;}
+  .footnote{font-size:12px; color:var(--muted); text-align:center; margin-top:18px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="Dynamic Dynamos" class="logo">
+    <p class="eyebrow">PLAYER VOTE</p>
+    <h1>Nominate</h1>
+    <p class="sub">Pick your top 3 players.</p>
+  </header>
+
+  <div class="card" id="voteCard">
+    <div id="voteFormArea">
+      <div class="voter-row">
+        <label>Your voting code</label>
+        <input type="text" id="accessCode" placeholder="e.g. AB12CD" style="text-transform:uppercase;">
+      </div>
+      <button class="submit-btn" id="checkCodeBtn">Continue</button>
+      <div class="msg" id="codeMsg"></div>
+    </div>
+  </div>
+  <p class="status" id="connStatus"></p>
+  <p class="footnote">Enter the code you were given to cast your vote. Each code can be used once per round.</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAnpf_l0WWngwIOfuLQDbQ2HvAYtOpt0yU",
+  authDomain: "player-of-the-month.firebaseapp.com",
+  projectId: "player-of-the-month",
+  storageBucket: "player-of-the-month.firebasestorage.app",
+  messagingSenderId: "79635632178",
+  appId: "1:79635632178:web:499e8401ef1400ce116c2b"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const DEFAULT_PLAYERS = ["Player A","Player B","Player C","Player D","Player E","Player F"];
+const connStatus = document.getElementById('connStatus');
+const formArea = document.getElementById('voteFormArea');
+let currentCode = null;
+
+document.getElementById('checkCodeBtn').onclick = ()=> checkCode();
+document.getElementById('accessCode').addEventListener('keydown', e=>{
+  if(e.key==='Enter') checkCode();
+});
+
+async function checkCode(){
+  const input = document.getElementById('accessCode');
+  const msg = document.getElementById('codeMsg');
+  const btn = document.getElementById('checkCodeBtn');
+  const code = input.value.trim().toUpperCase();
+  if(!code){ msg.textContent='Enter your code.'; msg.className='msg err'; return; }
+  btn.disabled = true; btn.textContent = 'Checking...';
+  msg.textContent = '';
+  try{
+    const ref = doc(db, 'voteCodes', code);
+    const snap = await getDoc(ref);
+    if(!snap.exists()){
+      msg.textContent = 'That code is not recognized. Check it and try again.'; msg.className='msg err';
+      btn.disabled=false; btn.textContent='Continue';
+      return;
+    }
+    const data = snap.data();
+    const roundSnap = await getDoc(doc(db,'meta','round'));
+    const round = roundSnap.exists() ? roundSnap.data() : {stage:'round1'};
+    const isRound2 = round.stage === 'round2';
+    if(isRound2 && data.round2Used){
+      showSubmittedScreen('Your Round 2 vote is already submitted!');
+      return;
+    }
+    if(!isRound2 && data.round1Used){
+      showSubmittedScreen('Your vote is already submitted!');
+      return;
+    }
+    currentCode = code;
+    if(isRound2){
+      renderRound2Form(round.finalists || []);
+    } else {
+      const pSnap = await getDoc(doc(db,'meta','players'));
+      const players = pSnap.exists() ? (pSnap.data().list || []) : DEFAULT_PLAYERS.slice();
+      renderRound1Form(players);
+    }
+  }catch(e){
+    console.error(e);
+    msg.textContent = 'Could not verify code: ' + e.message; msg.className='msg err';
+    btn.disabled=false; btn.textContent='Continue';
+  }
+}
+
+function showSubmittedScreen(message){
+  formArea.innerHTML = `
+    <div style="text-align:center; padding:20px 0;">
+      <div style="font-size:38px; margin-bottom:10px;">✅</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:24px; color:var(--green); letter-spacing:.02em;">${message}</div>
+      <p class="sub" style="margin-top:10px;">Thanks for voting — no further action needed.</p>
+    </div>
+  `;
+}
+
+function renderRound1Form(players){
+  formArea.innerHTML = `
+    <div class="voter-row">
+      <label>Your name</label>
+      <input type="text" id="voterName" placeholder="e.g. Sam">
+    </div>
+    <div class="pick-label"><span class="pick-num">1</span>First pick</div>
+    <select id="pick1"></select>
+    <div class="pick-label" style="margin-top:14px;"><span class="pick-num">2</span>Second pick</div>
+    <select id="pick2"></select>
+    <div class="pick-label" style="margin-top:14px;"><span class="pick-num">3</span>Third pick</div>
+    <select id="pick3"></select>
+    <button class="submit-btn" id="submitBtn" disabled>Submit nominations</button>
+    <div class="msg" id="voteMsg"></div>
+  `;
+  const sel1=document.getElementById('pick1'), sel2=document.getElementById('pick2'), sel3=document.getElementById('pick3');
+  [sel1,sel2,sel3].forEach(s=>s.innerHTML='<option value="">Select a player</option>' + players.map(p=>`<option value="${p}">${p}</option>`).join(''));
+
+  function updateSubmitState(){
+    const v = document.getElementById('voterName').value.trim();
+    const p1 = document.getElementById('pick1').value;
+    const p2 = document.getElementById('pick2').value;
+    const p3 = document.getElementById('pick3').value;
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('voteMsg');
+    let ok = v && p1 && p2 && p3;
+    if(ok && (p1===p2 || p1===p3 || p2===p3)){
+      ok=false; msg.textContent='Pick 3 different players.'; msg.className='msg err';
+    } else { msg.textContent=''; }
+    btn.disabled = !ok;
+  }
+  ['voterName','pick1','pick2','pick3'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', updateSubmitState);
+    document.getElementById(id).addEventListener('change', updateSubmitState);
+  });
+
+  document.getElementById('submitBtn').onclick = async ()=>{
+    const voter = document.getElementById('voterName').value.trim();
+    const picks = [document.getElementById('pick1').value, document.getElementById('pick2').value, document.getElementById('pick3').value];
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('voteMsg');
+    btn.disabled = true; btn.textContent='Submitting...';
+    try{
+      const codeRef = doc(db, 'voteCodes', currentCode);
+      const codeSnap = await getDoc(codeRef);
+      if(codeSnap.exists() && codeSnap.data().round1Used){
+        showSubmittedScreen('Your vote is already submitted!');
+        return;
+      }
+      const id = voter.toLowerCase().replace(/\s+/g,'_');
+      await setDoc(doc(db, 'votes', id), {voter, picks, ts: Date.now(), code: currentCode});
+      await setDoc(codeRef, {round1Used:true, round1Voter:voter}, {merge:true});
+      showSubmittedScreen('Your vote is submitted!');
+      return;
+    }catch(e){
+      console.error(e);
+      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
+    }
+    btn.textContent='Submit nominations';
+    updateSubmitState();
+  };
+}
+
+function renderRound2Form(finalists){
+  formArea.innerHTML = `
+    <p class="sub" style="margin-top:0; margin-bottom:18px;">Round 2 — pick your favorite among the top 3.</p>
+    <div class="voter-row">
+      <label>Your name</label>
+      <input type="text" id="voterName2" placeholder="e.g. Sam">
+    </div>
+    <div class="pick-label">Your pick</div>
+    <select id="finalPick"></select>
+    <button class="submit-btn" id="submitBtn2" disabled>Submit final vote</button>
+    <div class="msg" id="voteMsg2"></div>
+  `;
+  const sel = document.getElementById('finalPick');
+  sel.innerHTML = '<option value="">Select a player</option>' + finalists.map(p=>`<option value="${p}">${p}</option>`).join('');
+
+  function updateSubmitState(){
+    const v = document.getElementById('voterName2').value.trim();
+    const p = document.getElementById('finalPick').value;
+    document.getElementById('submitBtn2').disabled = !(v && p);
+  }
+  document.getElementById('voterName2').addEventListener('input', updateSubmitState);
+  document.getElementById('finalPick').addEventListener('change', updateSubmitState);
+
+  document.getElementById('submitBtn2').onclick = async ()=>{
+    const voter = document.getElementById('voterName2').value.trim();
+    const pick = document.getElementById('finalPick').value;
+    const btn = document.getElementById('submitBtn2');
+    const msg = document.getElementById('voteMsg2');
+    btn.disabled = true; btn.textContent='Submitting...';
+    try{
+      const codeRef = doc(db, 'voteCodes', currentCode);
+      const codeSnap = await getDoc(codeRef);
+      if(codeSnap.exists() && codeSnap.data().round2Used){
+        showSubmittedScreen('Your Round 2 vote is already submitted!');
+        return;
+      }
+      const id = voter.toLowerCase().replace(/\s+/g,'_');
+      await setDoc(doc(db, 'votes_round2', id), {voter, pick, ts: Date.now(), code: currentCode});
+      await setDoc(codeRef, {round2Used:true, round2Voter:voter}, {merge:true});
+      showSubmittedScreen('Your Round 2 vote is submitted!');
+      return;
+    }catch(e){
+      console.error(e);
+      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Nominate — Vote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#081A3A; --card:#0F2B5C; --card-line:#2E5BAE; --gold:#3D8BFF;
+    --text:#F2F0E9; --muted:#9FB8E8; --green:#4CAF80; --red:#D9655B;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  body{margin:0; background:var(--bg) repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 26px); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; padding-bottom:40px;}
+  .wrap{max-width:480px; margin:0 auto; padding:0 18px;}
+  header{padding:28px 0 18px; text-align:center; position:relative;}
+  header::before{
+    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:160px; height:6px; border-radius:0 0 6px 6px;
+    background:repeating-linear-gradient(90deg, #FFFFFF 0 14px, var(--gold) 14px 28px);
+  }
+  .logo{width:72px; height:72px; border-radius:50%; object-fit:cover; margin-bottom:10px;}
+  .eyebrow{font-family:'Bebas Neue',sans-serif; letter-spacing:.18em; color:var(--gold); font-size:13px; margin:0 0 4px;}
+  h1{font-family:'Bebas Neue',sans-serif; font-size:42px; letter-spacing:.02em; margin:0; line-height:1;}
+  .sub{color:var(--muted); font-size:14px; margin-top:8px; line-height:1.5;}
+  .card{background:var(--card); border:1px solid var(--card-line); border-radius:16px; padding:18px; margin-bottom:14px;}
+  .voter-row{margin-bottom:16px;}
+  .voter-row label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:6px;}
+  input[type=text],input[type=password]{width:100%; background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Inter',sans-serif;}
+  input[type=text]:focus,input[type=password]:focus{outline:none; border-color:var(--gold);}
+  .pick-label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin:14px 0 8px;}
+  select{width:100%; background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Inter',sans-serif; appearance:none; -webkit-appearance:none;
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237C8AA5' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; background-size:18px;}
+  select:focus{outline:none; border-color:var(--gold);}
+  .pick-num{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue'; font-size:12px; margin-right:6px;}
+  .submit-btn{width:100%; padding:15px; border:none; border-radius:12px; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.04em; cursor:pointer; margin-top:18px;}
+  .submit-btn:disabled{background:#3A3424; color:#6b6450; cursor:not-allowed;}
+  .msg{font-size:13px; margin-top:10px; text-align:center;}
+  .msg.ok{color:var(--green);} .msg.err{color:var(--red);}
+  .status{font-size:12px; color:var(--muted); text-align:center; margin-top:10px;}
+  .footnote{font-size:12px; color:var(--muted); text-align:center; margin-top:18px; line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="Dynamic Dynamos" class="logo">
+    <p class="eyebrow">PLAYER VOTE</p>
+    <h1>Nominate</h1>
+    <p class="sub">Pick your top 3 players.</p>
+  </header>
+
+  <div class="card" id="voteCard">
+    <div id="voteFormArea"></div>
+  </div>
+  <p class="status" id="connStatus"></p>
+  <p class="footnote">Enter the code you were given to cast your vote. Each code can be used once per round.</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAnpf_l0WWngwIOfuLQDbQ2HvAYtOpt0yU",
+  authDomain: "player-of-the-month.firebaseapp.com",
+  projectId: "player-of-the-month",
+  storageBucket: "player-of-the-month.firebasestorage.app",
+  messagingSenderId: "79635632178",
+  appId: "1:79635632178:web:499e8401ef1400ce116c2b"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const DEFAULT_PLAYERS = ["Player A","Player B","Player C","Player D","Player E","Player F"];
+const connStatus = document.getElementById('connStatus');
+const formArea = document.getElementById('voteFormArea');
+
+
+function showSubmittedScreen(message){
+  formArea.innerHTML = `
+    <div style="text-align:center; padding:20px 0;">
+      <div style="font-size:38px; margin-bottom:10px;">✅</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:24px; color:var(--green); letter-spacing:.02em;">${message}</div>
+      <p class="sub" style="margin-top:10px;">Thanks for voting — no further action needed.</p>
+    </div>
+  `;
+}
+
+function renderRound1Form(players){
+  formArea.innerHTML = `
+    <div class="voter-row">
+      <label>Your name</label>
+      <input type="text" id="voterName" placeholder="e.g. Sam">
+    </div>
+    <div class="pick-label"><span class="pick-num">1</span>First pick</div>
+    <select id="pick1"></select>
+    <div class="pick-label" style="margin-top:14px;"><span class="pick-num">2</span>Second pick</div>
+    <select id="pick2"></select>
+    <div class="pick-label" style="margin-top:14px;"><span class="pick-num">3</span>Third pick</div>
+    <select id="pick3"></select>
+    <button class="submit-btn" id="submitBtn" disabled>Submit nominations</button>
+    <div class="msg" id="voteMsg"></div>
+  `;
+  const sel1=document.getElementById('pick1'), sel2=document.getElementById('pick2'), sel3=document.getElementById('pick3');
+  [sel1,sel2,sel3].forEach(s=>s.innerHTML='<option value="">Select a player</option>' + players.map(p=>`<option value="${p}">${p}</option>`).join(''));
+
+  function updateSubmitState(){
+    const v = document.getElementById('voterName').value.trim();
+    const p1 = document.getElementById('pick1').value;
+    const p2 = document.getElementById('pick2').value;
+    const p3 = document.getElementById('pick3').value;
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('voteMsg');
+    let ok = v && p1 && p2 && p3;
+    if(ok && (p1===p2 || p1===p3 || p2===p3)){
+      ok=false; msg.textContent='Pick 3 different players.'; msg.className='msg err';
+    } else { msg.textContent=''; }
+    btn.disabled = !ok;
+  }
+  ['voterName','pick1','pick2','pick3'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', updateSubmitState);
+    document.getElementById(id).addEventListener('change', updateSubmitState);
+  });
+
+  document.getElementById('submitBtn').onclick = async ()=>{
+    const voter = document.getElementById('voterName').value.trim();
+    const picks = [document.getElementById('pick1').value, document.getElementById('pick2').value, document.getElementById('pick3').value];
+    const btn = document.getElementById('submitBtn');
+    const msg = document.getElementById('voteMsg');
+    btn.disabled = true; btn.textContent='Submitting...';
+    try{
+            const id = voter.toLowerCase().replace(/\s+/g,'_');
+      const existing=await getDoc(doc(db,'votes',id));
+      if(existing.exists()){msg.textContent='You have already voted.';msg.className='msg err';btn.textContent='Submit nominations';updateSubmitState();return;}
+      await setDoc(doc(db,'votes',id), {voter,picks,ts:Date.now()});
+      showSubmittedScreen('Your vote is submitted!');
+      return;
+    }catch(e){
+      console.error(e);
+      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
+    }
+    btn.textContent='Submit nominations';
+    updateSubmitState();
+  };
+}
+
+function renderRound2Form(finalists){
+  formArea.innerHTML = `
+    <p class="sub" style="margin-top:0; margin-bottom:18px;">Round 2 — pick your favorite among the top 3.</p>
+    <div class="voter-row">
+      <label>Your name</label>
+      <input type="text" id="voterName2" placeholder="e.g. Sam">
+    </div>
+    <div class="pick-label">Your pick</div>
+    <select id="finalPick"></select>
+    <button class="submit-btn" id="submitBtn2" disabled>Submit final vote</button>
+    <div class="msg" id="voteMsg2"></div>
+  `;
+  const sel = document.getElementById('finalPick');
+  sel.innerHTML = '<option value="">Select a player</option>' + finalists.map(p=>`<option value="${p}">${p}</option>`).join('');
+
+  function updateSubmitState(){
+    const v = document.getElementById('voterName2').value.trim();
+    const p = document.getElementById('finalPick').value;
+    document.getElementById('submitBtn2').disabled = !(v && p);
+  }
+  document.getElementById('voterName2').addEventListener('input', updateSubmitState);
+  document.getElementById('finalPick').addEventListener('change', updateSubmitState);
+
+  document.getElementById('submitBtn2').onclick = async ()=>{
+    const voter = document.getElementById('voterName2').value.trim();
+    const pick = document.getElementById('finalPick').value;
+    const btn = document.getElementById('submitBtn2');
+    const msg = document.getElementById('voteMsg2');
+    btn.disabled = true; btn.textContent='Submitting...';
+    try{
+      const codeRef = doc(db, 'voteCodes', currentCode);
+      const codeSnap = await getDoc(codeRef);
+      if(codeSnap.exists() && codeSnap.data().round2Used){
+        showSubmittedScreen('Your Round 2 vote is already submitted!');
+        return;
+      }
+      const id = voter.toLowerCase().replace(/\s+/g,'_');
+      await setDoc(doc(db, 'votes_round2', id), {voter, pick, ts: Date.now(), code: currentCode});
+      await setDoc(codeRef, {round2Used:true, round2Voter:voter}, {merge:true});
+      showSubmittedScreen('Your Round 2 vote is submitted!');
+      return;
+    }catch(e){
+      console.error(e);
+      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
+    }
+    btn.textContent='Submit final vote';
+    updateSubmitState();
+  };
+}
+
+getDoc(doc(db,'meta','players')).then(s=>renderRound1Form(s.exists()? (s.data().list||DEFAULT_PLAYERS):DEFAULT_PLAYERS));
+document.getElementById('connStatus').textContent='';
+</script>
+</body>
+</html>
+    }
+    btn.textContent='Submit final vote';
+    updateSubmitState();
+  };
+}
+
+document.getElementById('connStatus').textContent = '';
+</script>
+</body>
+</html>
