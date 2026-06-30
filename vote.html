@@ -105,10 +105,13 @@ function renderRound1Form(players){
     </div>
     <div class="pick-label"><span class="pick-num">1</span>First pick</div>
     <select id="pick1"></select>
+    <input type="text" id="reason1" placeholder="Reason for your 1st pick" style="margin-top:8px;">
     <div class="pick-label" style="margin-top:14px;"><span class="pick-num">2</span>Second pick</div>
     <select id="pick2"></select>
+    <input type="text" id="reason2" placeholder="Reason for your 2nd pick" style="margin-top:8px;">
     <div class="pick-label" style="margin-top:14px;"><span class="pick-num">3</span>Third pick</div>
     <select id="pick3"></select>
+    <input type="text" id="reason3" placeholder="Reason for your 3rd pick" style="margin-top:8px;">
     <button class="submit-btn" id="submitBtn" disabled>Submit nominations</button>
     <div class="msg" id="voteMsg"></div>
   `;
@@ -128,14 +131,14 @@ function renderRound1Form(players){
     } else { msg.textContent=''; }
     btn.disabled = !ok;
   }
-  ['voterName','pick1','pick2','pick3'].forEach(id=>{
+  ['voterName','pick1','reason1','pick2','reason2','pick3','reason3'].forEach(id=>{
     document.getElementById(id).addEventListener('input', updateSubmitState);
     document.getElementById(id).addEventListener('change', updateSubmitState);
   });
 
   document.getElementById('submitBtn').onclick = async ()=>{
     const voter = document.getElementById('voterName').value.trim();
-    const picks = [document.getElementById('pick1').value, document.getElementById('pick2').value, document.getElementById('pick3').value];
+    const picks=[{player:document.getElementById('pick1').value,reason:document.getElementById('reason1').value.trim()},{player:document.getElementById('pick2').value,reason:document.getElementById('reason2').value.trim()},{player:document.getElementById('pick3').value,reason:document.getElementById('reason3').value.trim()}];
     const btn = document.getElementById('submitBtn');
     const msg = document.getElementById('voteMsg');
     btn.disabled = true; btn.textContent='Submitting...';
@@ -147,6 +150,9 @@ function renderRound1Form(players){
       document.getElementById('pick1').value='';
       document.getElementById('pick2').value='';
       document.getElementById('pick3').value='';
+      document.getElementById('reason1').value='';
+      document.getElementById('reason2').value='';
+      document.getElementById('reason3').value='';
     }catch(e){
       console.error(e);
       msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
