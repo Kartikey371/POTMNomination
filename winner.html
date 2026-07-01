@@ -26,15 +26,6 @@
   .sub{color:var(--muted); font-size:14px; margin-top:8px; line-height:1.5;}
   .card{background:var(--card); border:1px solid var(--card-line); border-radius:16px; padding:18px; margin-bottom:14px;}
 
-  .lock-screen{text-align:center; padding:60px 0;}
-  .voter-row{margin-bottom:16px; text-align:left;}
-  .voter-row label{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:6px;}
-  input[type=text],input[type=password]{width:100%; background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; color:var(--text); font-size:15px; font-family:'Inter',sans-serif;}
-  input[type=text]:focus,input[type=password]:focus{outline:none; border-color:var(--gold);}
-  .lock-btn{width:100%; padding:14px; border:none; border-radius:12px; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:.04em; cursor:pointer;}
-  .msg{font-size:13px; margin-top:10px; text-align:center;}
-  .msg.ok{color:var(--green);} .msg.err{color:var(--red);}
-
   .winner-card{text-align:center; padding:34px 18px; border:1px solid var(--gold); position:relative; overflow:hidden;}
   .avatar-circle{width:84px; height:84px; border-radius:50%; background:linear-gradient(180deg,#1E4488,var(--card)); border:2px solid var(--gold); display:flex; align-items:center; justify-content:center; margin:0 auto 12px;}
   .avatar-circle svg{width:50px; height:50px;}
@@ -66,20 +57,7 @@
     <h1>The Winner</h1>
   </header>
 
-  <div id="lockScreen" class="card lock-screen">
-    <div class="voter-row">
-      <label>Email</label>
-      <input type="text" id="adminEmail" placeholder="you@example.com" autocomplete="username">
-    </div>
-    <div class="voter-row">
-      <label>Password</label>
-      <input type="password" id="adminPassword" placeholder="Enter password" autocomplete="current-password">
-    </div>
-    <button class="lock-btn" id="unlockBtn">Sign in</button>
-    <div class="msg" id="lockMsg"></div>
-  </div>
-
-  <div id="content" style="display:none;">
+  <div id="content">
     <div id="winnerArea"></div>
     <div class="card" id="podiumCard" style="display:none;">
       <div class="podium" id="podium"></div>
@@ -92,7 +70,6 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAnpf_l0WWngwIOfuLQDbQ2HvAYtOpt0yU",
@@ -104,43 +81,8 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
 
-const DEFAULT_PLAYERS = ["Player A","Player B","Player C","Player D","Player E","Player F"];
-
-const lockScreen = document.getElementById('lockScreen');
-const content = document.getElementById('content');
 const connStatus = document.getElementById('connStatus');
-
-document.getElementById('unlockBtn').onclick = async ()=>{
-  const email = document.getElementById('adminEmail').value.trim();
-  const pw = document.getElementById('adminPassword').value;
-  const msg = document.getElementById('lockMsg');
-  const btn = document.getElementById('unlockBtn');
-  btn.disabled = true; btn.textContent = 'Signing in...';
-  try{
-    await signInWithEmailAndPassword(auth, email, pw);
-    msg.textContent = '';
-  }catch(e){
-    msg.textContent = 'Sign in failed: ' + e.message;
-    msg.className = 'msg err';
-  }
-  btn.disabled = false; btn.textContent = 'Sign in';
-};
-document.getElementById('adminPassword').addEventListener('keydown', e=>{
-  if(e.key==='Enter') document.getElementById('unlockBtn').click();
-});
-
-onAuthStateChanged(auth, (user)=>{
-  if(user){
-    lockScreen.style.display='none';
-    content.style.display='block';
-    boot();
-  } else {
-    lockScreen.style.display='block';
-    content.style.display='none';
-  }
-});
 
 async function boot(){
   const winnerArea = document.getElementById('winnerArea');
@@ -154,34 +96,30 @@ async function boot(){
   try{
     const rSnap = await getDoc(doc(db,'meta','round'));
     if(rSnap.exists()) round = rSnap.data();
-  }catch(e){}
+  }catch(e){
+    connStatus.textContent = 'Could not load: ' + e.message;
+    winnerArea.innerHTML = '<div class="empty">Could not load results.</div>';
+    return;
+  }
+
+  // Only ever show Round 2 results here — Round 1 is nominations, not a final result.
+  if(round.stage !== 'round2'){
+    winnerArea.innerHTML = '<div class="empty">Round 2 hasn\'t started yet — check back once the final runoff is live.</div>';
+    podiumCard.style.display='none';
+    return;
+  }
 
   let sorted = [];
   let totalVoters = 0;
-  let usingRound2 = false;
 
   try{
-    if(round.stage === 'round2'){
-      usingRound2 = true;
-      const vSnap = await getDocs(collection(db,'votes_round2'));
-      const r2votes = vSnap.docs.map(d=>d.data());
-      totalVoters = r2votes.length;
-      const tally = {};
-      (round.finalists||[]).forEach(p=>tally[p]=0);
-      r2votes.forEach(v=>{ if(v.pick) tally[v.pick]=(tally[v.pick]||0)+1; });
-      sorted = Object.entries(tally).sort((a,b)=>b[1]-a[1]).filter(([,c])=>c>0);
-    } else {
-      let players = DEFAULT_PLAYERS.slice();
-      const pSnap = await getDoc(doc(db, 'meta', 'players'));
-      if(pSnap.exists()) players = pSnap.data().list || players;
-      const vSnap = await getDocs(collection(db, 'votes'));
-      const votes = vSnap.docs.map(d=>d.data());
-      totalVoters = votes.length;
-      const tally = {};
-      players.forEach(p=>tally[p]=0);
-      votes.forEach(v=>(v.picks||[]).forEach(p=>{ if(p) tally[p]=(tally[p]||0)+1; }));
-      sorted = Object.entries(tally).sort((a,b)=>b[1]-a[1]).filter(([,c])=>c>0);
-    }
+    const vSnap = await getDocs(collection(db,'votes_round2'));
+    const r2votes = vSnap.docs.map(d=>d.data());
+    totalVoters = r2votes.length;
+    const tally = {};
+    (round.finalists||[]).forEach(p=>tally[p]=0);
+    r2votes.forEach(v=>{ if(v.pick) tally[v.pick]=(tally[v.pick]||0)+1; });
+    sorted = Object.entries(tally).sort((a,b)=>b[1]-a[1]).filter(([,c])=>c>0);
   }catch(e){
     connStatus.textContent = 'Could not load: ' + e.message;
     winnerArea.innerHTML = '<div class="empty">Could not load results.</div>';
@@ -189,16 +127,13 @@ async function boot(){
   }
 
   if(totalVoters===0 || sorted.length===0){
-    winnerArea.innerHTML = usingRound2
-      ? '<div class="empty">Round 2 is live but no votes yet.</div>'
-      : '<div class="empty">No nominations yet — nothing to announce.</div>';
+    winnerArea.innerHTML = '<div class="empty">Round 2 is live but no votes yet.</div>';
     podiumCard.style.display='none';
     return;
   }
 
   const top3 = sorted.slice(0,3);
   const [winnerName, winnerCount] = top3[0];
-  const stageLabel = usingRound2 ? 'PLAYER OF THE MONTH — FINAL' : 'LEADING (ROUND 1, NOT FINAL)';
   winnerArea.innerHTML = `
     <div class="card winner-card">
       <div class="avatar-circle">
@@ -210,7 +145,7 @@ async function boot(){
         </svg>
       </div>
       <div class="crown">🏆</div>
-      <div class="winner-label">${stageLabel}</div>
+      <div class="winner-label">PLAYER OF THE MONTH — FINAL</div>
       <div class="winner-name">${winnerName}</div>
       <div class="winner-votes">${winnerCount} vote${winnerCount===1?'':'s'}</div>
     </div>
@@ -225,10 +160,10 @@ async function boot(){
     return `<div class="slot ${classes[i]}"><div class="rank">${ranks[i]}</div><div class="bar">${count}</div><div class="name">${name}</div><div class="count">${count} vote${count===1?'':'s'}</div></div>`;
   }).join('');
 
-  note.textContent = usingRound2
-    ? `Based on ${totalVoters} round 2 ${totalVoters===1?'vote':'votes'}`
-    : `Based on ${totalVoters} round 1 ${totalVoters===1?'submission':'submissions'} — start Round 2 in Admin for a final result`;
+  note.textContent = `Based on ${totalVoters} round 2 ${totalVoters===1?'vote':'votes'}`;
 }
+
+boot();
 </script>
 </body>
 </html>
