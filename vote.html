@@ -95,9 +95,9 @@ const formArea = document.getElementById('voteFormArea');
 const footNote = document.getElementById('footNote');
 
 const monthTitle = document.getElementById("monthTitle");
-const months = ["JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER","JANUARY","FEBRUARY","MARCH","APRIL","MAY"];
+const monthTitle = document.getElementById("monthTitle");
 const monthIndex = (new Date().getMonth() - 5 + 12) % 12;
-monthTitle.textContent = months[monthIndex];
+monthTitle.textContent = "JUNE";
 
 // --- Cookie helpers ---
 function setCookie(name, value, days){
