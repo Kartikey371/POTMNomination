@@ -62,7 +62,7 @@
   <header>
     <img src="logo.png" alt="Dynamic Dynamos" class="logo">
     <p class="eyebrow">PLAYER OF THE MONTH</p>
-    <h2 id="monthTitle" style="font-family:'Bebas Neue',sans-serif; letter-spacing:.08em; margin:6px 0 0; color:#F2F0E9;"></h2>
+    <h2 id="monthTitle" style="font-family:'Bebas Neue',sans-serif; letter-spacing:.08em; margin:6px 0 0; color:#F2F0E9;">JUNE</h2>
     <h1>Nominate</h1>
     <p class="sub">Pick your top 3 players.</p>
   </header>
@@ -93,11 +93,6 @@ const DEFAULT_PLAYERS = ["Player A","Player B","Player C","Player D","Player E",
 const connStatus = document.getElementById('connStatus');
 const formArea = document.getElementById('voteFormArea');
 const footNote = document.getElementById('footNote');
-
-const monthTitle = document.getElementById("monthTitle");
-const monthTitle = document.getElementById("monthTitle");
-const monthIndex = (new Date().getMonth() - 5 + 12) % 12;
-monthTitle.textContent = "JUNE";
 
 // --- Cookie helpers ---
 function setCookie(name, value, days){
