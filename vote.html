@@ -15,11 +15,7 @@
   body{margin:0; background:var(--bg) repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 26px); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; padding-bottom:40px;}
   .wrap{max-width:480px; margin:0 auto; padding:0 18px;}
   header{padding:28px 0 18px; text-align:center; position:relative;}
-  header::before{
-    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
-    width:160px; height:6px; border-radius:0 0 6px 6px;
-    background:repeating-linear-gradient(90deg, #FFFFFF 0 14px, var(--gold) 14px 28px);
-  }
+  header::before{content:''; position:absolute; top:0; left:50%; transform:translateX(-50%); width:160px; height:6px; border-radius:0 0 6px 6px; background:repeating-linear-gradient(90deg, #FFFFFF 0 14px, var(--gold) 14px 28px);}
   .logo{width:72px; height:72px; border-radius:50%; object-fit:cover; margin-bottom:10px;}
   .eyebrow{font-family:'Bebas Neue',sans-serif; letter-spacing:.18em; color:var(--gold); font-size:13px; margin:0 0 4px;}
   h1{font-family:'Bebas Neue',sans-serif; font-size:42px; letter-spacing:.02em; margin:0; line-height:1;}
@@ -36,11 +32,29 @@
   select:focus{outline:none; border-color:var(--gold);}
   .pick-num{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue'; font-size:12px; margin-right:6px;}
   .submit-btn{width:100%; padding:15px; border:none; border-radius:12px; background:var(--gold); color:#FFFFFF; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:.04em; cursor:pointer; margin-top:18px;}
-  .submit-btn:disabled{background:#3A3424; color:#6b6450; cursor:not-allowed;}
+  .submit-btn:disabled{background:#1A3366; color:#5B7AAA; cursor:not-allowed;}
   .msg{font-size:13px; margin-top:10px; text-align:center;}
   .msg.ok{color:var(--green);} .msg.err{color:var(--red);}
   .status{font-size:12px; color:var(--muted); text-align:center; margin-top:10px;}
   .footnote{font-size:12px; color:var(--muted); text-align:center; margin-top:18px; line-height:1.5;}
+
+  /* Thank you screen */
+  .thankyou{text-align:center; padding:40px 18px;}
+  .thankyou .icon{font-size:56px; margin-bottom:12px;}
+  .thankyou h2{font-family:'Bebas Neue'; font-size:36px; letter-spacing:.04em; margin:0 0 8px; color:var(--gold);}
+  .thankyou p{color:var(--muted); font-size:14px; line-height:1.6; margin:0;}
+  .thankyou .picks-summary{margin-top:20px; text-align:left;}
+  .pick-chip{background:#06122B; border:1px solid var(--card-line); border-radius:10px; padding:10px 14px; margin-bottom:8px;}
+  .pick-chip .pick-top{display:flex; align-items:center; gap:8px;}
+  .pick-chip .num{font-family:'Bebas Neue'; color:var(--gold); font-size:15px; min-width:24px;}
+  .pick-chip .pname{font-weight:700; font-size:14px;}
+  .pick-chip .pnote{font-size:12px; color:var(--muted); margin-top:4px; padding-left:32px;}
+
+  /* Already voted screen */
+  .already{text-align:center; padding:40px 18px;}
+  .already .icon{font-size:48px; margin-bottom:12px;}
+  .already h2{font-family:'Bebas Neue'; font-size:30px; color:var(--muted); margin:0 0 8px;}
+  .already p{color:var(--muted); font-size:13px; line-height:1.6;}
 </style>
 </head>
 <body>
@@ -56,7 +70,7 @@
     <div id="voteFormArea">Loading...</div>
   </div>
   <p class="status" id="connStatus">Connecting...</p>
-  <p class="footnote">Your nominations are recorded for this poll.</p>
+  <p class="footnote" id="footNote">Your nominations are recorded for this poll.</p>
 </div>
 
 <script type="module">
@@ -77,27 +91,81 @@ const db = getFirestore(app);
 const DEFAULT_PLAYERS = ["Player A","Player B","Player C","Player D","Player E","Player F"];
 const connStatus = document.getElementById('connStatus');
 const formArea = document.getElementById('voteFormArea');
+const footNote = document.getElementById('footNote');
+
+// --- Cookie helpers ---
+function setCookie(name, value, days){
+  const d = new Date(); d.setTime(d.getTime() + days*24*60*60*1000);
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+}
+function getCookie(name){
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// --- Thank you screen ---
+function showThankYou(voter, picks, notes, round){
+  formArea.innerHTML = `
+    <div class="thankyou">
+      <div class="icon">🎉</div>
+      <h2>Thank you, ${voter}!</h2>
+      <p>Your ${round === 'round2' ? 'final vote' : 'nominations have'} been recorded.<br>Good luck to your picks!</p>
+      ${round !== 'round2' ? `
+      <div class="picks-summary">
+        ${picks.map((p,i)=>`
+          <div class="pick-chip">
+            <div class="pick-top"><span class="num">${i+1}</span><span class="pname">${p}</span></div>
+            ${notes[i] ? `<div class="pnote">"${notes[i]}"</div>` : ''}
+          </div>`).join('')}
+      </div>` : ''}
+    </div>
+  `;
+  footNote.style.display = 'none';
+  connStatus.textContent = '';
+}
+
+// --- Already voted screen ---
+function showAlreadyVoted(voter){
+  formArea.innerHTML = `
+    <div class="already">
+      <div class="icon">✅</div>
+      <h2>Already voted</h2>
+      <p>You've already submitted your nominations${voter ? ` as <strong>${voter}</strong>` : ''}.<br>Each person can only vote once per round.</p>
+    </div>
+  `;
+  footNote.style.display = 'none';
+  connStatus.textContent = '';
+}
 
 async function init(){
   try{
     const roundSnap = await getDoc(doc(db,'meta','round'));
     const round = roundSnap.exists() ? roundSnap.data() : {stage:'round1'};
     connStatus.textContent = '';
+
+    // Check cookie for this round
+    const cookieKey = round.stage === 'round2' ? 'dd_voted_r2' : 'dd_voted_r1';
+    const votedName = getCookie(cookieKey);
+    if(votedName){
+      showAlreadyVoted(votedName);
+      return;
+    }
+
     if(round.stage === 'round2'){
-      renderRound2Form(round.finalists || []);
+      renderRound2Form(round.finalists || [], cookieKey);
     } else {
       const pSnap = await getDoc(doc(db,'meta','players'));
       const players = pSnap.exists() ? (pSnap.data().list || []) : DEFAULT_PLAYERS.slice();
-      renderRound1Form(players);
+      renderRound1Form(players, cookieKey);
     }
   }catch(e){
     console.error(e);
     connStatus.textContent = 'Could not connect: ' + e.message;
-    renderRound1Form(DEFAULT_PLAYERS.slice());
+    renderRound1Form(DEFAULT_PLAYERS.slice(), 'dd_voted_r1');
   }
 }
 
-function renderRound1Form(players){
+function renderRound1Form(players, cookieKey){
   formArea.innerHTML = `
     <div class="voter-row">
       <label>Your name</label>
@@ -105,13 +173,13 @@ function renderRound1Form(players){
     </div>
     <div class="pick-label"><span class="pick-num">1</span>First pick</div>
     <select id="pick1"></select>
-    <input type="text" id="reason1" placeholder="Reason for your 1st pick" style="margin-top:8px;">
+    <input type="text" id="note1" placeholder="Why this player? (optional)" style="margin-top:8px;">
     <div class="pick-label" style="margin-top:14px;"><span class="pick-num">2</span>Second pick</div>
     <select id="pick2"></select>
-    <input type="text" id="reason2" placeholder="Reason for your 2nd pick" style="margin-top:8px;">
+    <input type="text" id="note2" placeholder="Why this player? (optional)" style="margin-top:8px;">
     <div class="pick-label" style="margin-top:14px;"><span class="pick-num">3</span>Third pick</div>
     <select id="pick3"></select>
-    <input type="text" id="reason3" placeholder="Reason for your 3rd pick" style="margin-top:8px;">
+    <input type="text" id="note3" placeholder="Why this player? (optional)" style="margin-top:8px;">
     <button class="submit-btn" id="submitBtn" disabled>Submit nominations</button>
     <div class="msg" id="voteMsg"></div>
   `;
@@ -120,49 +188,37 @@ function renderRound1Form(players){
 
   function updateSubmitState(){
     const v = document.getElementById('voterName').value.trim();
-    const p1 = document.getElementById('pick1').value;
-    const p2 = document.getElementById('pick2').value;
-    const p3 = document.getElementById('pick3').value;
-    const btn = document.getElementById('submitBtn');
-    const msg = document.getElementById('voteMsg');
+    const p1=document.getElementById('pick1').value, p2=document.getElementById('pick2').value, p3=document.getElementById('pick3').value;
+    const btn=document.getElementById('submitBtn'), msg=document.getElementById('voteMsg');
     let ok = v && p1 && p2 && p3;
-    if(ok && (p1===p2 || p1===p3 || p2===p3)){
-      ok=false; msg.textContent='Pick 3 different players.'; msg.className='msg err';
-    } else { msg.textContent=''; }
+    if(ok && (p1===p2||p1===p3||p2===p3)){ ok=false; msg.textContent='Pick 3 different players.'; msg.className='msg err'; } else { msg.textContent=''; }
     btn.disabled = !ok;
   }
-  ['voterName','pick1','reason1','pick2','reason2','pick3','reason3'].forEach(id=>{
+  ['voterName','pick1','pick2','pick3'].forEach(id=>{
     document.getElementById(id).addEventListener('input', updateSubmitState);
     document.getElementById(id).addEventListener('change', updateSubmitState);
   });
 
   document.getElementById('submitBtn').onclick = async ()=>{
     const voter = document.getElementById('voterName').value.trim();
-    const picks=[{player:document.getElementById('pick1').value,reason:document.getElementById('reason1').value.trim()},{player:document.getElementById('pick2').value,reason:document.getElementById('reason2').value.trim()},{player:document.getElementById('pick3').value,reason:document.getElementById('reason3').value.trim()}];
-    const btn = document.getElementById('submitBtn');
-    const msg = document.getElementById('voteMsg');
-    btn.disabled = true; btn.textContent='Submitting...';
+    const picks = [document.getElementById('pick1').value, document.getElementById('pick2').value, document.getElementById('pick3').value];
+    const notes = [document.getElementById('note1').value.trim(), document.getElementById('note2').value.trim(), document.getElementById('note3').value.trim()];
+    const btn=document.getElementById('submitBtn'), msg=document.getElementById('voteMsg');
+    btn.disabled=true; btn.textContent='Submitting...';
     try{
       const id = voter.toLowerCase().replace(/\s+/g,'_');
-      await setDoc(doc(db, 'votes', id), {voter, picks, ts: Date.now()});
-      msg.textContent = 'Nominations submitted!'; msg.className='msg ok';
-      document.getElementById('voterName').value='';
-      document.getElementById('pick1').value='';
-      document.getElementById('pick2').value='';
-      document.getElementById('pick3').value='';
-      document.getElementById('reason1').value='';
-      document.getElementById('reason2').value='';
-      document.getElementById('reason3').value='';
+      await setDoc(doc(db,'votes',id), {voter, picks, notes, ts: Date.now()});
+      setCookie(cookieKey, voter, 30);
+      showThankYou(voter, picks, notes, 'round1');
     }catch(e){
       console.error(e);
-      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
+      msg.textContent='Could not submit: '+e.message; msg.className='msg err';
+      btn.disabled=false; btn.textContent='Submit nominations';
     }
-    btn.textContent='Submit nominations';
-    updateSubmitState();
   };
 }
 
-function renderRound2Form(finalists){
+function renderRound2Form(finalists, cookieKey){
   formArea.innerHTML = `
     <p class="sub" style="margin-top:0; margin-bottom:18px;">Round 2 — pick your favorite among the top 3.</p>
     <div class="voter-row">
@@ -174,35 +230,30 @@ function renderRound2Form(finalists){
     <button class="submit-btn" id="submitBtn2" disabled>Submit final vote</button>
     <div class="msg" id="voteMsg2"></div>
   `;
-  const sel = document.getElementById('finalPick');
-  sel.innerHTML = '<option value="">Select a player</option>' + finalists.map(p=>`<option value="${p}">${p}</option>`).join('');
+  document.getElementById('finalPick').innerHTML = '<option value="">Select a player</option>' + finalists.map(p=>`<option value="${p}">${p}</option>`).join('');
 
   function updateSubmitState(){
-    const v = document.getElementById('voterName2').value.trim();
-    const p = document.getElementById('finalPick').value;
-    document.getElementById('submitBtn2').disabled = !(v && p);
+    const v=document.getElementById('voterName2').value.trim(), p=document.getElementById('finalPick').value;
+    document.getElementById('submitBtn2').disabled=!(v&&p);
   }
   document.getElementById('voterName2').addEventListener('input', updateSubmitState);
   document.getElementById('finalPick').addEventListener('change', updateSubmitState);
 
   document.getElementById('submitBtn2').onclick = async ()=>{
-    const voter = document.getElementById('voterName2').value.trim();
-    const pick = document.getElementById('finalPick').value;
-    const btn = document.getElementById('submitBtn2');
-    const msg = document.getElementById('voteMsg2');
-    btn.disabled = true; btn.textContent='Submitting...';
+    const voter=document.getElementById('voterName2').value.trim();
+    const pick=document.getElementById('finalPick').value;
+    const btn=document.getElementById('submitBtn2'), msg=document.getElementById('voteMsg2');
+    btn.disabled=true; btn.textContent='Submitting...';
     try{
       const id = voter.toLowerCase().replace(/\s+/g,'_');
-      await setDoc(doc(db, 'votes_round2', id), {voter, pick, ts: Date.now()});
-      msg.textContent = 'Final vote submitted!'; msg.className='msg ok';
-      document.getElementById('voterName2').value='';
-      document.getElementById('finalPick').value='';
+      await setDoc(doc(db,'votes_round2',id), {voter, pick, ts: Date.now()});
+      setCookie(cookieKey, voter, 30);
+      showThankYou(voter, [pick], [''], 'round2');
     }catch(e){
       console.error(e);
-      msg.textContent = 'Could not submit: ' + e.message; msg.className='msg err';
+      msg.textContent='Could not submit: '+e.message; msg.className='msg err';
+      btn.disabled=false; btn.textContent='Submit final vote';
     }
-    btn.textContent='Submit final vote';
-    updateSubmitState();
   };
 }
 
