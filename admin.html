@@ -340,7 +340,8 @@ async function renderResults(){
         const r2snap = await getDocs(collection(db,'votes_round2'));
         r2snap.docs.forEach(d=>batch.delete(d.ref));
         await batch.commit();
-        await deleteDoc(doc(db,'meta','round'));
+        // Reset round doc to fresh round1 with a new pollId — single atomic write
+        await setDoc(doc(db,'meta','round'), {stage:'round1', finalists:[], pollId: String(Date.now())});
 
         alert('Poll archived. Ready for a new round 1.');
         renderResults();
@@ -377,7 +378,7 @@ async function renderResults(){
     startBtn.onclick = async ()=>{
       if(!confirm(`Start Round 2 with: ${top3.map(t=>t[0]).join(', ')}? Voters will then only see this runoff.`)) return;
       try{
-        await setDoc(doc(db,'meta','round'), {stage:'round2', finalists: top3.map(t=>t[0])});
+        await setDoc(doc(db,'meta','round'), {stage:'round2', finalists: top3.map(t=>t[0]), pollId: round.pollId || String(Date.now())});
         renderResults();
       }catch(e){ alert('Could not start round 2: '+e.message); }
     };
@@ -504,7 +505,8 @@ document.getElementById('backToRound1Btn').onclick = async ()=>{
     const batch = writeBatch(db);
     snap.docs.forEach(d=>batch.delete(d.ref));
     await batch.commit();
-    await deleteDoc(doc(db,'meta','round'));
+    // Reset to round1 with a new pollId
+    await setDoc(doc(db,'meta','round'), {stage:'round1', finalists:[], pollId: String(Date.now())});
     renderResults();
   }catch(e){ alert('Could not reset: '+e.message); }
 };
@@ -566,6 +568,8 @@ document.getElementById('resetVotesBtn').onclick = async ()=>{
     const batch = writeBatch(db);
     snap.docs.forEach(d=>batch.delete(d.ref));
     await batch.commit();
+    // Rotate pollId so everyone's "already voted" cookie/localStorage from the old poll no longer matches
+    await setDoc(doc(db,'meta','round'), {stage:'round1', finalists:[], pollId: String(Date.now())});
     alert('Votes cleared.');
     renderResults();
   }catch(e){
