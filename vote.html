@@ -102,6 +102,21 @@ function getCookie(name){
   const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : null;
 }
+// Cookie + localStorage value format: "pollId|voterName"
+function markVoted(roundKey, pollId, voterName){
+  const val = `${pollId}|${voterName}`;
+  setCookie(roundKey, val, 90);
+  try{ localStorage.setItem(roundKey, val); }catch(e){}
+}
+function checkVoted(roundKey, pollId){
+  // Check localStorage first (cross-tab), then cookie
+  let val = null;
+  try{ val = localStorage.getItem(roundKey); }catch(e){}
+  if(!val) val = getCookie(roundKey);
+  if(!val) return null;
+  const [storedPollId, voterName] = val.split('|');
+  return storedPollId === pollId ? (voterName || 'you') : null;
+}
 
 // --- Thank you screen ---
 function showThankYou(voter, picks, notes, round){
@@ -140,32 +155,32 @@ function showAlreadyVoted(voter){
 async function init(){
   try{
     const roundSnap = await getDoc(doc(db,'meta','round'));
-    const round = roundSnap.exists() ? roundSnap.data() : {stage:'round1'};
+    const round = roundSnap.exists() ? roundSnap.data() : {stage:'round1', pollId:'default'};
+    const pollId = round.pollId || 'default';
     connStatus.textContent = '';
 
-    // Check cookie for this round
     const cookieKey = round.stage === 'round2' ? 'dd_voted_r2' : 'dd_voted_r1';
-    const votedName = getCookie(cookieKey);
+    const votedName = checkVoted(cookieKey, pollId);
     if(votedName){
       showAlreadyVoted(votedName);
       return;
     }
 
     if(round.stage === 'round2'){
-      renderRound2Form(round.finalists || [], cookieKey);
+      renderRound2Form(round.finalists || [], cookieKey, pollId);
     } else {
       const pSnap = await getDoc(doc(db,'meta','players'));
       const players = pSnap.exists() ? (pSnap.data().list || []) : DEFAULT_PLAYERS.slice();
-      renderRound1Form(players, cookieKey);
+      renderRound1Form(players, cookieKey, pollId);
     }
   }catch(e){
     console.error(e);
     connStatus.textContent = 'Could not connect: ' + e.message;
-    renderRound1Form(DEFAULT_PLAYERS.slice(), 'dd_voted_r1');
+    renderRound1Form(DEFAULT_PLAYERS.slice(), 'dd_voted_r1', 'default');
   }
 }
 
-function renderRound1Form(players, cookieKey){
+function renderRound1Form(players, cookieKey, pollId){
   formArea.innerHTML = `
     <div class="voter-row">
       <label>Your name</label>
@@ -199,7 +214,10 @@ function renderRound1Form(players, cookieKey){
     document.getElementById(id).addEventListener('change', updateSubmitState);
   });
 
+  let isSubmitting = false;
   document.getElementById('submitBtn').onclick = async ()=>{
+    if(isSubmitting) return;
+    isSubmitting = true;
     const voter = document.getElementById('voterName').value.trim();
     const picks = [document.getElementById('pick1').value, document.getElementById('pick2').value, document.getElementById('pick3').value];
     const notes = [document.getElementById('note1').value.trim(), document.getElementById('note2').value.trim(), document.getElementById('note3').value.trim()];
@@ -207,18 +225,27 @@ function renderRound1Form(players, cookieKey){
     btn.disabled=true; btn.textContent='Submitting...';
     try{
       const id = voter.toLowerCase().replace(/\s+/g,'_');
+      // Check if this name already voted in Firestore
+      const existing = await getDoc(doc(db,'votes',id));
+      if(existing.exists()){
+        msg.textContent = 'This name has already voted. Use your own name.';
+        msg.className='msg err';
+        btn.disabled=false; btn.textContent='Submit nominations';
+        isSubmitting=false; return;
+      }
       await setDoc(doc(db,'votes',id), {voter, picks, notes, ts: Date.now()});
-      setCookie(cookieKey, voter, 30);
+      markVoted(cookieKey, pollId, voter);
       showThankYou(voter, picks, notes, 'round1');
     }catch(e){
       console.error(e);
       msg.textContent='Could not submit: '+e.message; msg.className='msg err';
       btn.disabled=false; btn.textContent='Submit nominations';
+      isSubmitting=false;
     }
   };
 }
 
-function renderRound2Form(finalists, cookieKey){
+function renderRound2Form(finalists, cookieKey, pollId){
   formArea.innerHTML = `
     <p class="sub" style="margin-top:0; margin-bottom:18px;">Round 2 — pick your favorite among the top 3.</p>
     <div class="voter-row">
@@ -239,20 +266,31 @@ function renderRound2Form(finalists, cookieKey){
   document.getElementById('voterName2').addEventListener('input', updateSubmitState);
   document.getElementById('finalPick').addEventListener('change', updateSubmitState);
 
+  let isSubmitting2 = false;
   document.getElementById('submitBtn2').onclick = async ()=>{
+    if(isSubmitting2) return;
+    isSubmitting2 = true;
     const voter=document.getElementById('voterName2').value.trim();
     const pick=document.getElementById('finalPick').value;
     const btn=document.getElementById('submitBtn2'), msg=document.getElementById('voteMsg2');
     btn.disabled=true; btn.textContent='Submitting...';
     try{
       const id = voter.toLowerCase().replace(/\s+/g,'_');
+      const existing = await getDoc(doc(db,'votes_round2',id));
+      if(existing.exists()){
+        msg.textContent = 'This name has already voted in round 2. Use your own name.';
+        msg.className='msg err';
+        btn.disabled=false; btn.textContent='Submit final vote';
+        isSubmitting2=false; return;
+      }
       await setDoc(doc(db,'votes_round2',id), {voter, pick, ts: Date.now()});
-      setCookie(cookieKey, voter, 30);
+      markVoted(cookieKey, pollId, voter);
       showThankYou(voter, [pick], [''], 'round2');
     }catch(e){
       console.error(e);
       msg.textContent='Could not submit: '+e.message; msg.className='msg err';
       btn.disabled=false; btn.textContent='Submit final vote';
+      isSubmitting2=false;
     }
   };
 }
